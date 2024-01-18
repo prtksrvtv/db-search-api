@@ -1,0 +1,6 @@
+flask
+sqlalchemy
+pandas
+datetime
+num2words
+babel
