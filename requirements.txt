@@ -5,3 +5,4 @@ datetime
 babel
 python-dotenv
 psycopg2
+gunicorn
