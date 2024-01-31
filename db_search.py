@@ -12,7 +12,7 @@ load_dotenv()
 engine = create_engine(os.environ['DATABASE_URL'])
 app = Flask(__name__)
 
-@app.route('/db_product_search', methods=['POST', 'GET'])
+@app.route('/db_product_search', methods=['POST', 'GET']) #product search
 def db_product_search():
     if request.method == 'GET':
         school_id = request.args.get('school_id')
@@ -21,7 +21,7 @@ def db_product_search():
         json_data = df.to_json(orient='columns')
         return json_data
 
-@app.route('/db_house_search', methods=['POST', 'GET'])
+@app.route('/db_house_search', methods=['POST', 'GET']) #house search
 def db_house_search():
     if request.method == 'GET':
         school_id = request.args.get('school_id')
@@ -29,7 +29,7 @@ def db_house_search():
         json_data = df.to_json(orient='columns')
         return json_data
     
-@app.route('/db_save_student_invoice', methods=['POST', 'GET'])
+@app.route('/db_save_student_invoice', methods=['POST', 'GET']) #save student invoice data
 def db_save_student_invoice():
     if request.method == 'POST':
         response=request.get_json()
@@ -56,7 +56,7 @@ def db_save_student_invoice():
     df.to_sql('sales', con1, if_exists='append', index=False)
     return jsonify(bill_no)
 
-@app.route('/db_search_student_invoice', methods=['POST', 'GET'])
+@app.route('/db_search_student_invoice', methods=['POST', 'GET']) #search student invoice and send the data to regenrate invoice
 def db_search_student_invoice():
     if request.method == 'GET':
         inv_no = request.args.get('inv_no')
@@ -77,10 +77,7 @@ def db_search_student_invoice():
             else:
                 df.loc[0,'tc_leave']="This Invoice is Marked for TC/Leave as YES"
             wa=number_to_word(df.loc[0,'total_price'])
-            #number_to_word(df.loc[0,'total_price'])
-            #num2words((df.loc[0,'total_price']).item(), to='currency',  lang='en_IN' , separator= ' and', cents=False, currency='INR')
             df.insert(8, 'Word Amount',[wa], True)
-            df.loc[0, 'Word Amount']=[df.loc[0,'Word Amount'].replace(' And 00 Paise','')] #replacing the  and 00 paise with empty space
             df.loc[0,'total_price']=[format_currency(df.loc[0,'total_price'], 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False)]
             json_data['headers'] = df.to_json(orient='columns')
             json_data['found']= True
@@ -92,6 +89,23 @@ def db_search_student_invoice():
             df['total_price']=df['total_price'].apply(lambda x:format_currency(x, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False))
             json_data['products'] = df.to_json(orient='columns')  
         return jsonify(json_data)
+
+@app.route('/db_product_pivot_principal_bill', methods=['POST', 'GET']) #search student invoice and send the data to regenrate invoice
+def db_product_pivot_principal_bill():
+    if request.method == 'GET':
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        school_id=request.args.get('school_id')
+        tc_leave=request.args.get('tc_leave')
+        query=text(""" select p.product_name, p.product_price, sum(item_quantity) as item_quantity, sum(total_price) as total_price
+                    from sales s
+                    join products p on p.id=s.item_id
+                    where date_of_purchase BETWEEN :start_date AND :end_date  AND s.school_id=:school_id AND s.tc_leave=:tc_leave
+                    group by p.product_name, p.product_price;""")
+        df=pd.read_sql(query, con=engine, params={'start_date':start_date, 'end_date':end_date, 'school_id':school_id, 'tc_leave':tc_leave})
+        json_data = df.to_json(orient='columns')
+        return json_data
+        
 
 if __name__ == '__main__':
    app.run(debug = True, host='127.1.1.1', port=8080)
