@@ -385,5 +385,5 @@ def db_save_raashan_bill_details():
     return jsonify({'response':"Success"})
 
 if __name__ == '__main__':
-   app.run(debug = True, host='127.1.1.1', port=8080) #for local dev
-   #app.run() #cloud run
+   #app.run(debug = True, host='127.1.1.1', port=8080) #for local dev
+   app.run() #cloud run
