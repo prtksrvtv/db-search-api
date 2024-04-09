@@ -1,0 +1,12 @@
+runtime: python39
+
+entrypoint: gunicorn -b :$PORT db_search:app
+
+service: db-handler-api
+
+handlers:
+- url: /.*
+  script: auto
+  
+env_variables:
+  DATABASE_URL : 'postgresql://root:m2FL9uhdq3uTNTuX3mui9SXA2cljGT1d@dpg-cigaj85ph6erq6jal3p0-a.oregon-postgres.render.com/prikaway'
