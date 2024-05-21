@@ -359,7 +359,8 @@ def db_raashan_products_search():
         tender = request.args.get('tender')
         df = pd.read_sql_query(text("""select tender_s_no,item_name,item_unit,rate,gst_amount
                                      from raashan_products where tender_number=:tender order by tender_number,tender_s_no"""),con=engine, params={'tender':tender})       
-        json_data = df.to_json(orient='columns')
+        json_data = df.to_json(orient='records')
+        print(json_data)
         return json_data
 
 @app.route('/db_save_raashan_bill_details', methods=['POST'])
