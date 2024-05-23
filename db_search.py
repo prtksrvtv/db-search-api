@@ -97,8 +97,6 @@ def db_save_student_invoice():
         con1=engine.connect() #creating new connection to save df to db
         con1.autocommit= True
         df_save_details_in_db.to_sql('sales', con1, if_exists='append', index=False) #persisting the df to db
-        print(response['header']['total_price'])
-        print(type(response['header']['total_price']))
         wa=number_to_word(response['header']['total_price'])
         return jsonify({'word_amount':wa, 'status':200})
         
@@ -360,31 +358,31 @@ def db_raashan_products_search():
         df = pd.read_sql_query(text("""select tender_s_no,item_name,item_unit,rate,gst_amount
                                      from raashan_products where tender_number=:tender order by tender_number,tender_s_no"""),con=engine, params={'tender':tender})       
         json_data = df.to_json(orient='records')
-        print(json_data)
         return json_data
 
 @app.route('/db_save_raashan_bill_details', methods=['POST'])
 def db_save_raashan_bill_details():
     if request.method == 'POST':
         input = request.get_json()
-        header=json.loads(input['header'])
-        products=pd.DataFrame(json.loads(input['products']))
-        query=text(""" select id, item_name as "Item Name" from raashan_products where tender_number=:tender""")
+        header=input['header']
+        products=pd.DataFrame.from_dict(input['products'], orient='index')
+        query=text("""select id, item_name from raashan_products where tender_number=:tender""")
         df=pd.read_sql_query(query, con=engine, params={'tender':header['tender']})
-        products=products.assign(invoice_no=header['Invoice No.'])
+        products=products.assign(invoice_no=header['invoice_no'])
         products=products.assign(start_date=header['start_date'])
         products=products.assign(end_date=header['end_date'])
         products=products.assign(inv_date=header['inv_date'])
         products=products.assign(tender_no=header['tender'])
-        products=products.merge(df, on='Item Name', how='left')
-        products.rename(columns={'Total Quantity':'quantity', 'id':'product_id', 'Total Price':'total_price'}, inplace=True)
-        products.drop(columns={'Tender S. No.', 'Item Name', 'Unit', 'Rate per Unit', 'GST Amount per Unit', }, inplace=True)
+        products=products.merge(df, on='item_name', how='left')
+        products.rename(columns={'item_quantity':'quantity', 'id':'product_id'}, inplace=True)
+        products.drop(columns={'tender_s_no', 'item_name', 'item_unit', 'rate', 'gst_amount', }, inplace=True)
         products=products[['invoice_no','product_id','tender_no', 'quantity','start_date', 'end_date', 'total_price', 'inv_date']]
         con1=engine.connect()
         con1.autocommit= True
         products.to_sql('raashan_sales', con1, if_exists='append', index=False)
-    return jsonify({'response':"Success"})
+        wa=number_to_word(header['total_price'])
+    return jsonify({'word_amount':wa})
 
 if __name__ == '__main__':
-   #app.run(debug = True, host='127.1.1.1', port=8080) #for local dev
-   app.run() #cloud run
+   app.run(debug = True, host='127.1.1.1', port=8080) #for local dev
+   #app.run() #cloud run
