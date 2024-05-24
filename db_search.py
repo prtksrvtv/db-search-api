@@ -22,7 +22,7 @@ def check():
 def login():
     if request.method == 'GET':
         params_dict=request.args.to_dict()
-        df = pd.read_sql_query(text("""select u.id as user_id, u.school_id as school_id, name as user_name, username as user_email, password, school_name, school_code from users u join schools s on u.school_id=s.id 
+        df = pd.read_sql_query(text("""select u.id as user_id, u.school_id as school_id, name as user_name, username as user_email, password, school_name, school_code, pic_url from users u join schools s on u.school_id=s.id 
                         where username=:username"""),con=engine, params={'username':params_dict['username']})
         if len(df) == 0:
             result={'status':400, 'message':'Incorrect Email', 'error': True}
