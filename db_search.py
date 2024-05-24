@@ -16,7 +16,7 @@ CORS(app)
 @app.route('/check', methods=['GET']) #health check 
 def check():
     if request.method == 'GET':
-        return jsonify({'result':'DB Plug Service is live!'})
+        return jsonify({'status': 200})
 
 @app.route('/login', methods=['GET'])
 def login():
