@@ -40,7 +40,7 @@ def login():
 def get_last_invoice_details():
     if request.method == 'GET':
         school_id=request.args.get('school_id')
-        df = pd.read_sql_query(text("""select bill_no, created_at from sales where school_id=:school_id order by created_at desc limit 1"""),con=engine, params={'school_id':school_id})
+        df = pd.read_sql_query(text("""select bill_no, date_of_purchase from sales where school_id=:school_id order by created_at desc limit 1"""),con=engine, params={'school_id':school_id})
         df = df.to_json(orient='records')
         return(df)
 
