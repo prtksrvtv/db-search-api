@@ -38,7 +38,7 @@ def login():
             
     return result 
 
-@app.route('/get_last_invoice_details', methods=['GET'])
+@app.route('/get_stat_data', methods=['GET'])
 def get_last_invoice_details():
     if request.method == 'GET':
         school_id=request.args.get('school_id')
