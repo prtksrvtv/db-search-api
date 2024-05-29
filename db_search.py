@@ -257,56 +257,71 @@ def db_change_student_invoice_tc_leave_status():
         return jsonify(result)
 
 @app.route('/db_stock_input', methods=['POST'])
-def db_stock_input():
+def db_update_inventory():
     if request.method == 'POST':
-        #get json from client
-        input=request.get_json()
-        #deserealizing json
-        input=json.loads(input)
-        #creating product dictionary from client
-        dict_products=input['products']       
-        #iterating over product dictionary
-        for x in dict_products:
-            #query to extract data from stock table
-            query=text(""" select item_id,stock_present from stock s 
-                   join products p on s.item_id=p.id and s.school_id=p.school_id
-                   where s.school_id=:school_id and p.product_name=:product_name""")
-            #creating dataframe of current products in stock
-            df=pd.read_sql_query(query, con=engine, params={'school_id':input['school_id'], 'product_name':x})
-            if len(df) == 0:
-                df_list=[] #empty list
-                for y in dict_products[x]:
-                    temp=y.split(":") #splitting pairs
-                    temp[0]=int(temp[0]) #converting to int
+        try:
+            #get json from client
+            input=request.get_json()
+            #fe means front end
+            print(input['type'])
+            df_stock_fe = pd.DataFrame.from_dict(input['products'], orient='index')
+            for i,row in df_stock_fe.iterrows():
+                row['entry']=row['entry'].split(',')
+                df_list=[]
+                flag=True
+                for x in row['entry']:
+                    temp=x.split(':')
+                    temp[0]=int(temp[0])
                     temp[1]=int(temp[1])
-                    df_list.append(temp) #appending the pairs to list
-                #creating temporary df and converting to json to hold the new stock entered by client
-                d=pd.DataFrame(df_list, columns=['size','quantity']).to_json(orient='index') 
-                query=text("""select id from products where product_name=:product_name and school_id=:school_id""")
-                temp=pd.read_sql(query, con=engine, params={'product_name':x, 'school_id':input['school_id']})    #getting product id from product table
-                query=text("""insert into stock (item_id, school_id, stock_present)
-                                values (:item_id, :school_id, :stock_present)""") 
-                with engine.connect() as c:
-                    c.execute(query, {'item_id':str(temp.iloc[0,0]), 'school_id':str(input['school_id']), 'stock_present':d})
-                    c.commit()
+                    df_list.append(temp)
+                d=pd.DataFrame(df_list, columns=['size','quantity'])
+                print(d)
+                query=text(""" select item_id,stock_present from stock s 
+                    join products p on s.item_id=p.id and s.school_id=p.school_id
+                    where s.school_id=:school_id and p.product_name=:product_name""")
+                #creating dataframe of current products in stock
+                df=pd.read_sql_query(query, con=engine, params={'school_id':input['school_id'], 'product_name':row['product_name']})
+                if len(df) == 0:
+                    if int(input['type']) == 1:
+                        d=d.to_json(orient='index')
+                        query=text("""insert into stock (item_id, school_id, stock_present)
+                                        values (:item_id, :school_id, :stock_present)""") 
+                        with engine.connect() as c:
+                            c.execute(query, {'item_id':row['id'], 'school_id':input['school_id'], 'stock_present':d})
+                            c.commit()
+                    if input['type'] == 2:
+                        flag = False
+                        continue
+                else:
+                    stock_present_df=pd.DataFrame.from_dict(df['stock_present'][0], orient='index').set_index('size')
+                    for j,stock in d.iterrows(): #checking and updation the stock present dataframe
+                        if stock['size'] in stock_present_df.index : 
+                            if int(input['type']) == 1:   
+                                stock_present_df['quantity'][stock['size']] = stock_present_df['quantity'][stock['size']] + stock['quantity']
+                            if int(input['type']) == 2:
+                                stock_present_df['quantity'][stock['size']] = stock['quantity']                    
+                        else:
+                            if int(input['type']) == 1:
+                                stock_present_df.loc[stock['size']] = [stock['quantity']]
+                            if int(input['type']) == 2:
+                                flag=False
+                                continue
+                    stock_present_df.reset_index(inplace=True)
+                    stock_present_df=stock_present_df.to_json(orient='index') #converting the updated df to json 
+                    query=text("""update stock
+                            set stock_present=:stock 
+                            where item_id=:item_id and school_id=:school_id""")
+                    #save the updated df to the db
+                    with engine.connect() as c:
+                        c.execute(query, {'stock':stock_present_df, 'item_id':row['id'], 'school_id':input['school_id']})
+                        c.commit()
+            if flag:
+                response = 200 #success
             else:
-                stock=pd.DataFrame(df.iloc[0,1]).transpose()
-                stock.set_index('size', inplace=True)
-                for y in dict_products[x]: #iterating over different size:quantity in product dictionary
-                    temp=y.split(":") #splitting each pair
-                    if (int(temp[0]) in stock.index) is True: #checking if size is there in stock
-                        stock['quantity'][int(temp[0])] =stock.loc[int(temp[0]),'quantity']+int(temp[1]) #adding stock
-                    else:
-                        stock = stock._append(pd.Series({'quantity':int(temp[1])}, name=int(temp[0]))) #adding new row of size in stock present df
-                stock.reset_index(inplace=True)
-                stock=stock.to_json(orient='index') #converting to json
-                query=text("""update stock
-                           set stock_present=:stock 
-                           where item_id=:item_id and school_id=:school_id""")
-                with engine.connect() as c:
-                    c.execute(query, {'stock':stock, 'item_id':str(df.iloc[0,0]), 'school_id':str(input['school_id'])})
-                    c.commit()
-        return jsonify({'Message':'Stock input Successful'})
+                response = 100 #some were wrong entries hence ignored
+            return jsonify({'response': response})
+        except:
+            return jsonify({'response': 500}) #handling exceptions in case of wrong inputs
     
 @app.route('/db_view_inventory', methods=['GET'])
 def db_view_inventory():
@@ -319,37 +334,38 @@ def db_view_inventory():
         df=df.to_json(orient='index')
         return df
 
-@app.route('/db_update_inventory', methods=['POST'])
-def db_update_inventory():
-    if request.method == 'POST':
-        input = request.get_json()
-        input=json.loads(input)
-        products=input['products']
-        for x in products:
-            query=text("""select item_id,stock_present from stock s 
-                        join products p on s.item_id=p.id and s.school_id=p.school_id
-                        where s.school_id=:school_id and product_name=:product_name""")
-            df=pd.read_sql_query(query, con=engine, params={'school_id':input['school_id'], 'product_name':x})
-            if len(df) == 0:
-                return jsonify({'response':False})
-            else:
-                stock=pd.DataFrame(df.iloc[0,1]).transpose()
-                stock.set_index('size', inplace=True)
-                for y in products[x]:
-                    temp=y.split(":")                    
-                    if (int(temp[0]) in stock.index) is False:
-                        return jsonify({'response':False})
-                    else:
-                        stock['quantity'][int(temp[0])]=int(temp[1])
-                stock.reset_index(inplace=True)
-                stock=stock.to_json(orient='index')
-                query=text("""update stock
-                           set stock_present=:stock
-                           where item_id=:item_id and school_id=:school_id""")
-                with engine.connect() as c:
-                    c.execute(query, {'stock':stock, 'item_id':str(df.iloc[0,0]), 'school_id':str(input['school_id'])})
-                    c.commit()    
-        return jsonify({'response':True})
+#@app.route('/db_update_inventory', methods=['POST'])
+#def db_update_inventory():
+#    if request.method == 'POST':
+#        input = request.get_json()
+#       #fe means front end
+#        df_stock_fe = pd.DataFrame.from_dict(input['products'], orient='index')
+#        
+#        for x in input['products']:
+#            query=text("""select item_id,stock_present from stock s 
+#                        join products p on s.item_id=p.id and s.school_id=p.school_id
+#                        where s.school_id=:school_id and product_name=:product_name""")
+#            df=pd.read_sql_query(query, con=engine, params={'school_id':input['school_id'], 'product_name':x})
+#            if len(df) == 0:
+#                return jsonify({'response':'Product does not exist in inventory'})
+#        else:
+#            stock=pd.DataFrame(df.iloc[0,1]).transpose()
+#            stock.set_index('size', inplace=True)
+#            for y in products[x]:
+#                temp=y.split(":")                    
+#                if (int(temp[0]) in stock.index) is False:
+#                    stock['quantity'][int(temp[0])]=int(temp[1])
+#                stock.reset_index(inplace=True)
+#                stock=stock.to_json(orient='index')
+#                query=text("""update stock
+#                          set stock_present=:stock 
+#                           where item_id=:item_id and school_id=:school_id""")
+#                with engine.connect() as c:
+#                    c.execute(query, {'stock':stock, 'item_id':str(df.iloc[0,0]), 'school_id':str(input['school_id'])})
+#                    c.commit()    
+#        return jsonify({'response':True})
+
+
 
 @app.route('/db_raashan_products_search', methods=['GET'])
 def db_raashan_products_search():
@@ -384,5 +400,5 @@ def db_save_raashan_bill_details():
     return jsonify({'word_amount':wa})
 
 if __name__ == '__main__':
-   #app.run(debug = True, host='127.1.1.1', port=8080) #for local dev
-   app.run() #cloud run
+   app.run(debug = True, host='127.1.1.1', port=8080) #for local dev
+   #app.run() #cloud run
