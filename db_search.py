@@ -58,9 +58,15 @@ def get_last_invoice_details():
 def db_product_search():
     if request.method == 'GET':
         school_id = request.args.get('school_id') #getting arguments
-        df = pd.read_sql_query(text("""select id, product_name, product_price from products where school_id=:school_id"""),con=engine, params={'school_id':school_id})    
+        df = pd.read_sql_query(text("""select id, product_name, product_price, stock_present from products p
+                                     join stock s on s.item_id=p.id
+                                     where p.school_id=:school_id"""),con=engine, params={'school_id':school_id})
+        for x in df.index:
+            stock_present_df=pd.DataFrame.from_dict(df.loc[x,'stock_present'], orient='index').set_index('size')
+            stock_present_df.drop(stock_present_df[stock_present_df.quantity == 0].index, inplace=True)
+            df['stock_present'][x]=stock_present_df.index.values.tolist()
+        df.rename(columns={'stock_present':'sizes_present'}, inplace=True)
         json_data = df.to_json(orient='records') #converting to json
-        #a=df['product_name'].values.tolist()
         return json.dumps(json_data)
 
 @app.route('/db_house_search', methods=['GET']) #house search
@@ -416,5 +422,5 @@ def db_save_raashan_bill_details():
     return jsonify({'word_amount':wa})
 
 if __name__ == '__main__':
-   app.run(debug = True, host='127.1.1.1', port=8080) #for local dev
-   #app.run() #cloud run
+   #app.run(debug = True, host='localhost', port=8080) #for local dev
+   app.run() #cloud run
