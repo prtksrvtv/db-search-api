@@ -63,7 +63,7 @@ def db_product_search():
                                      where p.school_id=:school_id"""),con=engine, params={'school_id':school_id})
         for x in df.index:
             stock_present_df=pd.DataFrame.from_dict(df.loc[x,'stock_present'], orient='index').set_index('size')
-            stock_present_df.drop(stock_present_df[stock_present_df.quantity == 0].index, inplace=True)
+            stock_present_df.drop(stock_present_df[stock_present_df.quantity <= 0].index, inplace=True)
             df['stock_present'][x]=stock_present_df.index.values.tolist()
         df.rename(columns={'stock_present':'sizes_present'}, inplace=True)
         json_data = df.to_json(orient='records') #converting to json
