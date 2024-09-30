@@ -64,7 +64,7 @@ def db_product_search():
         for x in df.index:
             stock_present_df=pd.DataFrame.from_dict(df.loc[x,'stock_present'], orient='index').set_index('size')
             stock_present_df.drop(stock_present_df[stock_present_df.quantity <= 0].index, inplace=True)
-            df['stock_present'][x]=stock_present_df.index.values.tolist()
+            df.at[x, 'stock_present']=stock_present_df.index.values.tolist()
         df.rename(columns={'stock_present':'sizes_present'}, inplace=True)
         json_data = df.to_json(orient='records') #converting to json
         return json.dumps(json_data)
@@ -94,11 +94,7 @@ def db_save_student_invoice():
                 df_save_details_in_db=df_products #creating another instance
                 #getting house id and school code
                 df_school = pd.read_sql_query(text("""select h.id from house h join schools s on h.school_id=s.id where h.school_id=:school_id and h.house_name=:house_name"""),con=engine, params={'school_id':response['header']['schoolID'], 'house_name':response['header']['house_name']})     
-                house_id_var = df_school.iloc[0][0] #storing house id
-                #school_code=df_school.iloc[0][1] #storing school code
-                #inv_no= 'PWPL/'+school_code+'/'+str(my_date.year)+'/'+str(my_date.month)+'/'+str(df_header['Roll No.'][0])     #generating the invoice number
-                #getting product ids and product names 
-                #df = pd.read_sql_query(text("""select id as item_id, product_name as "Product Name" from products where school_id=:school_id"""),con=engine, params={'school_id':response['header']['schoolID']})
+                house_id_var = df_school.iloc[0,0] #storing house id
                 #adding new columns to df
                 df_save_details_in_db=df_save_details_in_db.assign(roll_no=response['header']['roll_no'])
                 df_save_details_in_db=df_save_details_in_db.assign(student_name=response['header']['student_name'])
@@ -110,7 +106,6 @@ def db_save_student_invoice():
                 df_save_details_in_db=df_save_details_in_db.assign(school_id=response['header']['schoolID'])
                 df_save_details_in_db=df_save_details_in_db.assign(user_id=response['header']['userID'])
                 #adding the product ids by merging the dfs
-                #df_save_details_in_db=df_save_details_in_db.merge(df, on='Product Name', how='left')
                 df_save_details_in_db.drop(columns={'product_name', 'product_price'}, inplace=True) #dropping some columns
                 #renaming columns
                 df_save_details_in_db.rename(columns={'id':'item_id','qty':'item_quantity', 'student_class':'class'}, inplace=True)
@@ -124,7 +119,6 @@ def db_save_student_invoice():
                 wa=number_to_word(response['header']['total_price'])
                 return jsonify({'word_amount':wa, 'response':200})
             
-
 @app.route('/db_search_student_invoice', methods=['GET']) #search student invoice and send the data to regenrate invoice
 def db_search_student_invoice():
     if request.method == 'GET':
@@ -140,22 +134,14 @@ def db_search_student_invoice():
         if len(df) == 0:
             return jsonify({"found":False})     #check if the invoice data is present in db 
         else:
-            #if df.loc[0,'tc_leave']==False: #capturing the TC/Leave data from db
-             #   df.loc[0,'tc_leave']="This Invoice is Marked for TC/Leave as NO"
-            #else:
-             #   df.loc[0,'tc_leave']="This Invoice is Marked for TC/Leave as YES"
             wa=number_to_word(df.loc[0,'total_price'])
             df.insert(8, 'Word Amount',[wa], True) #adding column to df
-            #df.loc[0,'total_price']=[format_currency(df.loc[0,'total_price'], 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False)] #passing in a list format
             json_data['headers'] = df.to_json(orient='records') #converting to json
             json_data['found']= True
             query=text("""select product_name, size, item_quantity, product_price, total_price from sales s
                             join products p on s.item_id=p.id
                             where bill_no=:bill_no and date_of_purchase=:date_of_purchase""")
             df=pd.read_sql(query, con=engine, params={'bill_no':params_dict['inv_no'], 'date_of_purchase':params_dict['date_of_purchase']}) #creating the product df
-            #formatting the currency values
-            #df['product_price']=df['product_price'].apply(lambda x:format_currency(x, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False))
-            #df['total_price']=df['total_price'].apply(lambda x:format_currency(x, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False))
             json_data['products'] = df.to_json(orient='records')   #converting to json
         return jsonify(json_data)
 
@@ -175,9 +161,6 @@ def db_product_pivot_principal_bill():
         item_quantity=str(df['Item Quantity'].sum())
         total_price=str(df['Total Price'].sum())
         word_amount=number_to_word(total_price)
-        #total_price=format_currency(total_price, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False)
-        #df['Unit Price']=df['Unit Price'].apply(lambda x:format_currency(x, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False))
-        #df['Total Price']=df['Total Price'].apply(lambda x:format_currency(x, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False))
         json_data['products'] = df.to_json(orient='records')
         df=pd.read_sql(text("""select school_name, school_code from schools where id=:school_id"""), con=engine, params={'school_id':params_dict['school_id']})
         school_name=df['school_name'][0]
@@ -204,8 +187,6 @@ def db_all_house_cover_page():
         item_quantity=str(df['Item Quantity'].sum())
         total_price=str(df['Total Price'].sum())
         word_amount=number_to_word(total_price)
-        #total_price=format_currency(total_price, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False)
-        #df['Total Price']=df['Total Price'].apply(lambda x:format_currency(x, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False))
         json_data['data'] = df.to_json(orient='records')
         df=pd.read_sql(text("""select school_name, school_code from schools where id=:school_id"""), con=engine, params={'school_id':params_dict['school_id']})
         school_name=df['school_name'][0]
@@ -230,8 +211,6 @@ def db_individual_house_cover_page():
         item_quantity=str(df['Item Quantity'].sum())
         total_price=str(df['Total Price'].sum())
         word_amount=number_to_word(total_price)
-        #total_price=format_currency(total_price, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False)
-        #df['Total Price']=df['Total Price'].apply(lambda x:format_currency(x, 'INR', format=u'#,##0\xa0¤', locale='en_IN', currency_digits=False))
         json_data['data'] = df.to_json(orient='records')
         df=pd.read_sql(text("""select school_name, school_code from schools where id=:school_id"""), con=engine, params={'school_id':params_dict['school_id']})
         school_name=df['school_name'][0]
@@ -356,39 +335,6 @@ def db_view_inventory():
         df=df.to_json(orient='index')
         return df
 
-#@app.route('/db_update_inventory', methods=['POST'])
-#def db_update_inventory():
-#    if request.method == 'POST':
-#        input = request.get_json()
-#       #fe means front end
-#        df_stock_fe = pd.DataFrame.from_dict(input['products'], orient='index')
-#        
-#        for x in input['products']:
-#            query=text("""select item_id,stock_present from stock s 
-#                        join products p on s.item_id=p.id and s.school_id=p.school_id
-#                        where s.school_id=:school_id and product_name=:product_name""")
-#            df=pd.read_sql_query(query, con=engine, params={'school_id':input['school_id'], 'product_name':x})
-#            if len(df) == 0:
-#                return jsonify({'response':'Product does not exist in inventory'})
-#        else:
-#            stock=pd.DataFrame(df.iloc[0,1]).transpose()
-#            stock.set_index('size', inplace=True)
-#            for y in products[x]:
-#                temp=y.split(":")                    
-#                if (int(temp[0]) in stock.index) is False:
-#                    stock['quantity'][int(temp[0])]=int(temp[1])
-#                stock.reset_index(inplace=True)
-#                stock=stock.to_json(orient='index')
-#                query=text("""update stock
-#                          set stock_present=:stock 
-#                           where item_id=:item_id and school_id=:school_id""")
-#                with engine.connect() as c:
-#                    c.execute(query, {'stock':stock, 'item_id':str(df.iloc[0,0]), 'school_id':str(input['school_id'])})
-#                    c.commit()    
-#        return jsonify({'response':True})
-
-
-
 @app.route('/db_raashan_products_search', methods=['GET'])
 def db_raashan_products_search():
     if request.method == 'GET':
@@ -421,6 +367,43 @@ def db_save_raashan_bill_details():
         wa=number_to_word(header['total_price'])
     return jsonify({'word_amount':wa})
 
+@app.route('/edit_student_invoice', methods=['POST'])
+def edit_student_invoice():
+    if request.method == 'POST':
+        response=request.get_json()
+        df_products= pd.DataFrame.from_dict(response['products'] ,orient='index') #creating the products df
+        update = inventory_update(df_products, response['header']['schoolID'])
+        if update == 500:
+            return jsonify({'response':500})
+        if update == 200:
+            df_save_details_in_db=df_products #creating another instance
+            #getting house id and school code
+            df_school = pd.read_sql_query(text("""select h.id from house h join schools s on h.school_id=s.id where h.school_id=:school_id and h.house_name=:house_name"""),con=engine, params={'school_id':response['header']['schoolID'], 'house_name':response['header']['house_name']})     
+            house_id_var = df_school.iloc[0,0] #storing house id
+            #adding new columns to df
+            df_save_details_in_db=df_save_details_in_db.assign(roll_no=response['header']['roll_no'])
+            df_save_details_in_db=df_save_details_in_db.assign(student_name=response['header']['student_name'])
+            df_save_details_in_db=df_save_details_in_db.assign(student_class=response['header']['class'])
+            df_save_details_in_db=df_save_details_in_db.assign(date_of_purchase=response['header']['date_of_purchase'])
+            df_save_details_in_db=df_save_details_in_db.assign(house_id=house_id_var)
+            df_save_details_in_db=df_save_details_in_db.assign(bill_no=response['header']['bill_no'])
+            df_save_details_in_db=df_save_details_in_db.assign(tc_leave=False)
+            df_save_details_in_db=df_save_details_in_db.assign(school_id=response['header']['schoolID'])
+            df_save_details_in_db=df_save_details_in_db.assign(user_id=response['header']['userID'])
+            #adding the product ids by merging the dfs
+            df_save_details_in_db.drop(columns={'product_name', 'product_price'}, inplace=True) #dropping some columns
+            #renaming columns
+            df_save_details_in_db.rename(columns={'id':'item_id','qty':'item_quantity', 'student_class':'class'}, inplace=True)
+            #rearranging the columns
+            df_save_details_in_db=df_save_details_in_db[['roll_no','student_name','class','house_id','item_id','item_quantity','total_price','tc_leave','date_of_purchase','bill_no','school_id','user_id','size']]
+            df_save_details_in_db=df_save_details_in_db.reset_index()
+            df_save_details_in_db.drop(columns={'index'}, inplace=True) #dropping some columns
+            con1=engine.connect() #creating new connection to save df to db
+            con1.autocommit= True
+            df_save_details_in_db.to_sql('sales', con1, if_exists='append', index=False) #persisting the df to db
+            wa=number_to_word(response['header']['total_price'])
+            return jsonify({'word_amount':wa, 'response':200})
+    
 if __name__ == '__main__':
-   #app.run(debug = True, host='localhost', port=8080) #for local dev
-   app.run() #cloud run
+   app.run(debug = True, host='localhost', port=8080) #for local dev
+   #app.run() #cloud run

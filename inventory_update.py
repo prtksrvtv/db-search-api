@@ -14,9 +14,9 @@ def inventory_update(df_products, school_id):
                         where s.school_id=:school_id and p.product_name=:product_name""")
         #creating dataframe of current products in stock
         df=pd.read_sql_query(query, con=engine, params={'school_id':school_id, 'product_name':row['product_name']})
-        stock_present_df=pd.DataFrame.from_dict(df['stock_present'][0], orient='index').set_index('size')
+        stock_present_df=pd.DataFrame.from_dict(df.at[0, 'stock_present'], orient='index').set_index('size')
         #checking and updating the stock present dataframe
-        stock_present_df['quantity'][int(row['size'])] = stock_present_df['quantity'][int(row['size'])] - int(row['item_quantity'])              
+        stock_present_df.loc['quantity', int(row['size'])] = stock_present_df['quantity'][int(row['size'])] - int(row['item_quantity'])              
         stock_present_df.reset_index(inplace=True)
         stock_present_df=stock_present_df.to_json(orient='index') #converting the updated df to json 
         query=text("""update stock
