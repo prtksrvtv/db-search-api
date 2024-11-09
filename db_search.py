@@ -52,7 +52,7 @@ def get_last_invoice_details():
                                     """)
         df1 = pd.read_sql_query(query,con=engine, params={'school_id':school_id})#get count of invoicves
         d=change_date_format(str(df['date_of_purchase'][0]))
-        return(jsonify ({'count':int(df1.iloc[0][0]), 'bill_no':df['bill_no'][0], 'date_of_purchase':d}))
+        return(jsonify ({'count':int(df1.iloc[0,0]), 'bill_no':df.at[0,'bill_no'], 'date_of_purchase':d}))
 
 @app.route('/db_product_search', methods=['GET']) #product search
 def db_product_search():
@@ -60,7 +60,8 @@ def db_product_search():
         school_id = request.args.get('school_id') #getting arguments
         df = pd.read_sql_query(text("""select id, product_name, product_price, stock_present from products p
                                      join stock s on s.item_id=p.id
-                                     where p.school_id=:school_id"""),con=engine, params={'school_id':school_id})
+                                     where p.school_id=:school_id
+                                     order by product_name"""),con=engine, params={'school_id':school_id})
         for x in df.index:
             stock_present_df=pd.DataFrame.from_dict(df.loc[x,'stock_present'], orient='index').set_index('size')
             stock_present_df.drop(stock_present_df[stock_present_df.quantity <= 0].index, inplace=True)
@@ -330,7 +331,8 @@ def db_view_inventory():
         school_id = request.args.get('school_id')
         query=text("""select product_name,stock_present from stock s 
                         join products p on s.item_id=p.id and s.school_id=p.school_id
-                        where s.school_id=:school_id""")
+                        where s.school_id=:school_id
+                        order by product_name""")
         df=pd.read_sql_query(query, con=engine, params={'school_id':school_id}, index_col='product_name')
         df=df.to_json(orient='index')
         return df
@@ -366,43 +368,6 @@ def db_save_raashan_bill_details():
         products.to_sql('raashan_sales', con1, if_exists='append', index=False)
         wa=number_to_word(header['total_price'])
     return jsonify({'word_amount':wa})
-
-@app.route('/edit_student_invoice', methods=['POST'])
-def edit_student_invoice():
-    if request.method == 'POST':
-        response=request.get_json()
-        df_products= pd.DataFrame.from_dict(response['products'] ,orient='index') #creating the products df
-        update = inventory_update(df_products, response['header']['schoolID'])
-        if update == 500:
-            return jsonify({'response':500})
-        if update == 200:
-            df_save_details_in_db=df_products #creating another instance
-            #getting house id and school code
-            df_school = pd.read_sql_query(text("""select h.id from house h join schools s on h.school_id=s.id where h.school_id=:school_id and h.house_name=:house_name"""),con=engine, params={'school_id':response['header']['schoolID'], 'house_name':response['header']['house_name']})     
-            house_id_var = df_school.iloc[0,0] #storing house id
-            #adding new columns to df
-            df_save_details_in_db=df_save_details_in_db.assign(roll_no=response['header']['roll_no'])
-            df_save_details_in_db=df_save_details_in_db.assign(student_name=response['header']['student_name'])
-            df_save_details_in_db=df_save_details_in_db.assign(student_class=response['header']['class'])
-            df_save_details_in_db=df_save_details_in_db.assign(date_of_purchase=response['header']['date_of_purchase'])
-            df_save_details_in_db=df_save_details_in_db.assign(house_id=house_id_var)
-            df_save_details_in_db=df_save_details_in_db.assign(bill_no=response['header']['bill_no'])
-            df_save_details_in_db=df_save_details_in_db.assign(tc_leave=False)
-            df_save_details_in_db=df_save_details_in_db.assign(school_id=response['header']['schoolID'])
-            df_save_details_in_db=df_save_details_in_db.assign(user_id=response['header']['userID'])
-            #adding the product ids by merging the dfs
-            df_save_details_in_db.drop(columns={'product_name', 'product_price'}, inplace=True) #dropping some columns
-            #renaming columns
-            df_save_details_in_db.rename(columns={'id':'item_id','qty':'item_quantity', 'student_class':'class'}, inplace=True)
-            #rearranging the columns
-            df_save_details_in_db=df_save_details_in_db[['roll_no','student_name','class','house_id','item_id','item_quantity','total_price','tc_leave','date_of_purchase','bill_no','school_id','user_id','size']]
-            df_save_details_in_db=df_save_details_in_db.reset_index()
-            df_save_details_in_db.drop(columns={'index'}, inplace=True) #dropping some columns
-            con1=engine.connect() #creating new connection to save df to db
-            con1.autocommit= True
-            df_save_details_in_db.to_sql('sales', con1, if_exists='append', index=False) #persisting the df to db
-            wa=number_to_word(response['header']['total_price'])
-            return jsonify({'word_amount':wa, 'response':200})
     
 if __name__ == '__main__':
    app.run(debug = True, host='localhost', port=8080) #for local dev
